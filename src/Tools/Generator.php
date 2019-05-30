@@ -86,7 +86,7 @@ class Generator
             'response' => $content,
             'showresponse' => ! empty($content),
             'validationRules' => $this->getValidationRules($method, $docBlock['tags']),
-            'permissions' => $this->getPermissions($method, $docBlock['tags'])
+            'permissions' => $this->getPermissions($docBlock['tags'])
         ];
         $parsedRoute['headers'] = $rulesToApply['headers'] ?? [];
 
