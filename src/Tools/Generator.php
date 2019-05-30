@@ -364,10 +364,15 @@ class Generator
     {
         $example = null;
         if (preg_match('/(.*)\s+Example:\s*(.*)\s*/', $description, $content)) {
-            $description = $content[1];
+                $description = $content[1];
 
+                // examples are parsed as strings by default, we need to cast them properly
+                $example = $this->castToType($content[2], $type);
+        } else if(preg_match('/Example:\s*(.*)\s*/', $description, $content))
+        {
+            $description = '';
             // examples are parsed as strings by default, we need to cast them properly
-            $example = $this->castToType($content[2], $type);
+            $example = $this->castToType($content[1], $type);
         }
 
         return [$description, $example];
@@ -428,8 +433,8 @@ class Generator
 
             if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
                     $f = $parameterClass->getMethod('rules')->getFileName();
-                    $start_line = $parameterClass->getMethod('rules')->getStartLine() + 2;
-                    $end_line = $parameterClass->getMethod('rules')->getEndLine() - 2;
+                    $start_line = $parameterClass->getMethod('rules')->getStartLine() + 1;
+                    $end_line = $parameterClass->getMethod('rules')->getEndLine() - 1;
 
                     $source = file($f);
                     $source = implode('', array_slice($source, 0, count($source)));
