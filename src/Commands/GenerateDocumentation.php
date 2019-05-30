@@ -81,20 +81,22 @@ class GenerateDocumentation extends Command
     {
         $outputPath = config('apidoc.output');
         $targetFile = $outputPath.DIRECTORY_SEPARATOR.'source'.DIRECTORY_SEPARATOR.'index.md';
-        $compareFile = $outputPath.DIRECTORY_SEPARATOR.'source'.DIRECTORY_SEPARATOR.'.compare.md';
-        $prependFile = $outputPath.DIRECTORY_SEPARATOR.'source'.DIRECTORY_SEPARATOR.'prepend.md';
-        $appendFile = $outputPath.DIRECTORY_SEPARATOR.'source'.DIRECTORY_SEPARATOR.'append.md';
+        $compareFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'.compare.md';
+        $prependFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'prepend.md';
+        $appendFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'append.md';
 
         $infoText = view('apidoc::partials.info')
             ->with('outputPath', ltrim($outputPath, 'public/'))
             ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection());
 
         $settings = ['languages' => config('apidoc.example_languages')];
+
         $parsedRouteOutput = $parsedRoutes->map(function ($routeGroup) use ($settings) {
             return $routeGroup->map(function ($route) use ($settings) {
                 if (count($route['cleanBodyParameters']) && ! isset($route['headers']['Content-Type'])) {
                     $route['headers']['Content-Type'] = 'application/json';
                 }
+
                 $route['output'] = (string) view('apidoc::partials.route')
                     ->with('route', $route)
                     ->with('settings', $settings)
@@ -143,8 +145,19 @@ class GenerateDocumentation extends Command
             ? "\n".file_get_contents($appendFile) : '';
 
         $documentarian = new Documentarian();
+        $groups = $parsedRouteOutput->keys();
 
-        $markdown = view('apidoc::documentarian')
+        if (! is_dir($outputPath)) {
+            $documentarian->create($outputPath);
+        }
+
+        foreach($groups as $group){
+            $groupRoutes = $parsedRouteOutput->get($group);
+            $targetFile = $outputPath.DIRECTORY_SEPARATOR.$group.'.md';
+            $frontmatter = view('apidoc::partials.frontmatter')
+                ->with('settings', $settings);
+
+            $markdown = view('apidoc::singledoc')
             ->with('writeCompareFile', false)
             ->with('frontmatter', $frontmatter)
             ->with('infoText', $infoText)
@@ -152,14 +165,14 @@ class GenerateDocumentation extends Command
             ->with('appendMd', $appendFileContents)
             ->with('outputPath', config('apidoc.output'))
             ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection())
-            ->with('parsedRoutes', $parsedRouteOutput);
+            ->with('groupName', $group)
+            ->with('parsedRoutes', $groupRoutes);
 
-        if (! is_dir($outputPath)) {
-            $documentarian->create($outputPath);
+            // Write output file
+            file_put_contents($targetFile, $markdown);
+
+            $this->info('Wrote '. $group .' to: '.$outputPath);
         }
-
-        // Write output file
-        file_put_contents($targetFile, $markdown);
 
         // Write comparable markdown file
         $compareMarkdown = view('apidoc::documentarian')
