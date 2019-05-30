@@ -85,9 +85,10 @@ class Generator
             'authenticated' => $this->getAuthStatusFromDocBlock($docBlock['tags']),
             'response' => $content,
             'showresponse' => ! empty($content),
-            'validationRules' => $this->getValidationRules($method, $docBlock['tags']),
+            'validationRules' => $this->getValidationRules($method),
             'permissions' => $this->getPermissions($docBlock['tags'])
         ];
+
         $parsedRoute['headers'] = $rulesToApply['headers'] ?? [];
 
         return $parsedRoute;
@@ -404,11 +405,10 @@ class Generator
 
     /**
      * @param $method
-     * @param $tags
      * @return array
      * @throws \ReflectionException
      */
-    public function getValidationRules($method, $tags){
+    public function getValidationRules($method){
 
         foreach ($method->getParameters() as $param) {
             $paramType = $param->getType();
@@ -427,38 +427,24 @@ class Generator
             }
 
             if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
+                    $f = $parameterClass->getMethod('rules')->getFileName();
+                    $start_line = $parameterClass->getMethod('rules')->getStartLine() + 2;
+                    $end_line = $parameterClass->getMethod('rules')->getEndLine() - 2;
 
-                if($parameterClass->isSubclassOf(CustomFormRequest::class)){
-                    return [];
-                }
+                    $source = file($f);
+                    $source = implode('', array_slice($source, 0, count($source)));
+                    $source = preg_split("/(\n|\r\n|\r)/", $source);
 
-            return $parameterClass->getMethod('rules')->invoke(null);
+                    $body = [];
+                    for($i=$start_line; $i<$end_line; $i++) {
+                        $body[] =  $source[$i];
+                    }
 
+                    return $body;
             }
         }
 
-        return $this->getValidationRulesFromDocBlock($tags);
-    }
-
-    /**
-     * @param array $tags
-     *
-     * @return array
-     */
-    protected function getValidationRulesFromDocBlock(array $tags)
-    {
-
-        $parameters = collect($tags)
-            ->filter(function ($tag) {
-                return $tag instanceof Tag && $tag->getName() === 'validationRules';
-            })
-            ->mapWithKeys(function ($tag) {
-
-            return [$tag->getContent()];
-
-            });
-
-        return $parameters;
+        return [];
     }
 
     /**
