@@ -2,6 +2,9 @@
 
 namespace Mpociot\ApiDoc\Commands;
 
+use Faker\Factory;
+use Faker\ORM\Doctrine\Populator;
+use Illuminate\Support\Facades\Auth;
 use ReflectionClass;
 use ReflectionException;
 use Illuminate\Routing\Route;
@@ -24,7 +27,7 @@ class GenerateDocumentation extends Command
      */
     protected $signature = 'apidoc:generate
                             {--force : Force rewriting of existing routes}
-    ';
+     ';
 
     /**
      * The console command description.
@@ -60,6 +63,26 @@ class GenerateDocumentation extends Command
         } else {
             $routes = $this->routeMatcher->getLaravelRoutesToBeDocumented(config('apidoc.routes'));
         }
+
+        $em = (app()->make('Railroad\Railcontent\Managers\RailcontentEntityManager'));
+        $fakerGenerator = Factory::create();
+        $populator = new Populator($fakerGenerator, $em);
+        $populator->addEntity('Railroad\Railcontent\Entities\Content',2,[
+            'type' => 'course',
+            'status' => 'published',
+            'brand' => 'brand'
+        ]);
+
+        $populator->addEntity('Railroad\Railcontent\Entities\User',1,[
+            'email' => 'aaaa@sds.ro'
+        ]);
+        $populator->addEntity('Railroad\Railcontent\Entities\Permission',1,[
+            'brand' => 'brand'
+        ]);
+
+        $populator->execute();
+
+        $this->setUserToBeImpersonated(1);
 
         $generator = new Generator(config('apidoc.faker_seed'));
         $parsedRoutes = $this->processRoutes($generator, $routes);
@@ -301,4 +324,23 @@ class GenerateDocumentation extends Command
     {
         return config('apidoc.postman.enabled', is_bool(config('apidoc.postman')) ? config('apidoc.postman') : false);
     }
+
+    /**
+     * @param $actAs
+     */
+    private function setUserToBeImpersonated($actAs)
+    {
+
+        if (! empty($actAs)) {
+            $this->
+            Auth::shouldReceive('check')
+                ->andReturn(true);
+            Auth::shouldReceive('id')
+                ->andReturn($actAs);
+            $userMockResults = ['id' => $actAs, 'email' => 'test@test.ro'];
+            Auth::shouldReceive('user')
+                ->andReturn($userMockResults);
+        }
+    }
+
 }

@@ -3,7 +3,7 @@
 namespace Mpociot\ApiDoc\Tools;
 
 use Faker\Factory;
-use Railroad\Railcontent\Requests\CustomFormRequest;
+use Faker\ORM\Doctrine\Populator;
 use ReflectionClass;
 use ReflectionMethod;
 use Illuminate\Routing\Route;
@@ -15,6 +15,7 @@ class Generator
 {
     use ParamHelpers;
 
+    private $populator;
     /**
      * @var string The seed to be used with Faker.
      * Useful when you want to always have the same fake output.
@@ -319,9 +320,11 @@ class Generator
     private function generateDummyValue(string $type)
     {
         $faker = Factory::create();
+
         if ($this->fakerSeed) {
             $faker->seed($this->fakerSeed);
         }
+
         $fakeFactories = [
             'integer' => function () use ($faker) {
                 return $faker->numberBetween(1, 20);
