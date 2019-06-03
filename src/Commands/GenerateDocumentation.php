@@ -63,10 +63,30 @@ class GenerateDocumentation extends Command
         } else {
             $routes = $this->routeMatcher->getLaravelRoutesToBeDocumented(config('apidoc.routes'));
         }
+       // dd(config('apidoc'));
+        if(!empty(config('apidoc.requiredEntities'))){
 
-        $em = (app()->make('Railroad\Railcontent\Managers\RailcontentEntityManager'));
-        $fakerGenerator = Factory::create();
-        $populator = new Populator($fakerGenerator, $em);
+            $em = app()->make(config('apidoc.entityManager'));
+            $fakerGenerator = Factory::create();
+            $populator = new Populator($fakerGenerator, $em);
+           // $fakeData = [];
+
+            foreach(config('apidoc.requiredEntities') as $entityName => $info){
+                if(!array_key_exists('data',$info)){
+                   // $populator->addEntity($entityName,$info['nr']);
+
+                    foreach($em->getClassMetadata($entityName)->getAssociationMappings() as $assoc){
+                      //  $populator($assoc);
+                    }
+                }
+               // $fakeData[] = $populator->execute();
+            }
+
+
+
+
+        }
+
         $populator->addEntity('Railroad\Railcontent\Entities\Content',2,[
             'type' => 'course',
             'status' => 'published',
@@ -80,9 +100,23 @@ class GenerateDocumentation extends Command
             'brand' => 'brand'
         ]);
 
+        $fakeData = $populator->execute();
+
+        $populator->addEntity('Railroad\Railcontent\Entities\ContentHierarchy',1,[
+            'parent' => $fakeData['Railroad\Railcontent\Entities\Content'][0],
+            'child' => $fakeData['Railroad\Railcontent\Entities\Content'][1],
+            'childPosition' => 1
+        ]);
+
+        $populator->addEntity('Railroad\Railcontent\Entities\Comment',2,[
+            'content' => $fakeData['Railroad\Railcontent\Entities\Content'][0],
+            'user' => $fakeData['Railroad\Railcontent\Entities\User'][0],
+        ]);
         $populator->execute();
 
         $this->setUserToBeImpersonated(1);
+
+        config(['railcontent.validation'=>[]]);
 
         $generator = new Generator(config('apidoc.faker_seed'));
         $parsedRoutes = $this->processRoutes($generator, $routes);
@@ -330,9 +364,7 @@ class GenerateDocumentation extends Command
      */
     private function setUserToBeImpersonated($actAs)
     {
-
         if (! empty($actAs)) {
-            $this->
             Auth::shouldReceive('check')
                 ->andReturn(true);
             Auth::shouldReceive('id')
