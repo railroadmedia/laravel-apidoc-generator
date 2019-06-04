@@ -63,23 +63,34 @@ class GenerateDocumentation extends Command
         } else {
             $routes = $this->routeMatcher->getLaravelRoutesToBeDocumented(config('apidoc.routes'));
         }
-       // dd(config('apidoc'));
+
         if(!empty(config('apidoc.requiredEntities'))){
 
             $em = app()->make(config('apidoc.entityManager'));
             $fakerGenerator = Factory::create();
-            $populator = new Populator($fakerGenerator, $em);
-           // $fakeData = [];
+
+            $fakeData = [];
 
             foreach(config('apidoc.requiredEntities') as $entityName => $info){
-                if(!array_key_exists('data',$info)){
-                   // $populator->addEntity($entityName,$info['nr']);
-
+                $populator = new Populator($fakerGenerator, $em);
+                $fak = $info['data']??[];
+                $i = 0;
                     foreach($em->getClassMetadata($entityName)->getAssociationMappings() as $assoc){
-                      //  $populator($assoc);
+                     if(array_key_exists($assoc['targetEntity'], $fakeData)){
+                        $fak[$assoc['fieldName']] = $fakeData[$assoc['targetEntity']][$i]??$fakeData[$assoc['targetEntity']][0];
+                        $i++;
+                     }
                     }
+
+                if($em->getClassMetadata($entityName)->hasField('user')){
+                    $fak['user'] = $fakeData['Railroad\Railcontent\Entities\User'][0];
                 }
-               // $fakeData[] = $populator->execute();
+
+                $populator->addEntity($entityName, $info['nr'], $fak);
+                            
+                $fakeEntity = $populator->execute();
+
+                $fakeData[array_key_first($fakeEntity)] = $fakeEntity[array_key_first($fakeEntity)];
             }
 
 
@@ -87,32 +98,6 @@ class GenerateDocumentation extends Command
 
         }
 
-        $populator->addEntity('Railroad\Railcontent\Entities\Content',2,[
-            'type' => 'course',
-            'status' => 'published',
-            'brand' => 'brand'
-        ]);
-
-        $populator->addEntity('Railroad\Railcontent\Entities\User',1,[
-            'email' => 'aaaa@sds.ro'
-        ]);
-        $populator->addEntity('Railroad\Railcontent\Entities\Permission',1,[
-            'brand' => 'brand'
-        ]);
-
-        $fakeData = $populator->execute();
-
-        $populator->addEntity('Railroad\Railcontent\Entities\ContentHierarchy',1,[
-            'parent' => $fakeData['Railroad\Railcontent\Entities\Content'][0],
-            'child' => $fakeData['Railroad\Railcontent\Entities\Content'][1],
-            'childPosition' => 1
-        ]);
-
-        $populator->addEntity('Railroad\Railcontent\Entities\Comment',2,[
-            'content' => $fakeData['Railroad\Railcontent\Entities\Content'][0],
-            'user' => $fakeData['Railroad\Railcontent\Entities\User'][0],
-        ]);
-        $populator->execute();
 
         $this->setUserToBeImpersonated(1);
 
