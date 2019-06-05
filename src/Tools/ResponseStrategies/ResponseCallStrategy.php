@@ -51,7 +51,6 @@ class ResponseCallStrategy
      */
     private function configureEnvironment(array $rulesToApply)
     {
-        $this->startDbTransaction();
         $this->setEnvironmentVariables($rulesToApply['env'] ?? []);
         $this->setLaravelConfigs($rulesToApply['config'] ?? []);
     }
@@ -143,7 +142,7 @@ class ResponseCallStrategy
      */
     private function finish()
     {
-        $this->endDbTransaction();
+
     }
 
     /**

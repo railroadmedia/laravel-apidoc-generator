@@ -64,92 +64,107 @@ class GenerateDocumentation extends Command
             $routes = $this->routeMatcher->getLaravelRoutesToBeDocumented(config('apidoc.routes'));
         }
 
-        if(!empty(config('apidoc.requiredEntities'))){
+        if (!empty(config('apidoc.requiredEntities'))) {
 
             $em = app()->make(config('apidoc.entityManager'));
+
             $fakerGenerator = Factory::create();
 
             $fakeData = [];
 
-            foreach(config('apidoc.requiredEntities') as $entityName => $info){
-                $populator = new Populator($fakerGenerator, $em);
-                $fak = $info['data']??[];
-                $i = 0;
-                    foreach($em->getClassMetadata($entityName)->getAssociationMappings() as $assoc){
-                     if(array_key_exists($assoc['targetEntity'], $fakeData)){
-                        $fak[$assoc['fieldName']] = $fakeData[$assoc['targetEntity']][$i]??$fakeData[$assoc['targetEntity']][0];
-                        $i++;
-                     }
-                    }
+            foreach (config('apidoc.requiredEntities') as $entityName => $info) {
 
-                if($em->getClassMetadata($entityName)->hasField('user')){
+                $populator = new Populator($fakerGenerator, $em);
+
+                $fak = $info['data'] ?? [];
+
+                $i = 0;
+                foreach (
+                    $em->getClassMetadata($entityName)
+                        ->getAssociationMappings() as $assoc
+                ) {
+                    if (array_key_exists($assoc['targetEntity'], $fakeData)) {
+                        $fak[$assoc['fieldName']] =
+                            $fakeData[$assoc['targetEntity']][$i] ?? $fakeData[$assoc['targetEntity']][0];
+                        $i++;
+                    }
+                }
+
+                if ($em->getClassMetadata($entityName)
+                    ->hasField('user')) {
                     $fak['user'] = $fakeData['Railroad\Railcontent\Entities\User'][0];
                 }
 
                 $populator->addEntity($entityName, $info['nr'], $fak);
-                            
+
                 $fakeEntity = $populator->execute();
 
                 $fakeData[array_key_first($fakeEntity)] = $fakeEntity[array_key_first($fakeEntity)];
             }
 
-
-
-
         }
-
 
         $this->setUserToBeImpersonated(1);
 
-        config(['railcontent.validation'=>[]]);
+        config(['railcontent.validation' => []]);
 
         $generator = new Generator(config('apidoc.faker_seed'));
         $parsedRoutes = $this->processRoutes($generator, $routes);
-        $parsedRoutes = collect($parsedRoutes)->groupBy('group')
-            ->sortBy(static function ($group) {
-                /* @var $group Collection */
-                return $group->first()['group'];
-            }, SORT_NATURAL);
+        $parsedRoutes =
+            collect($parsedRoutes)
+                ->groupBy('group')
+                ->sortBy(
+                    static function ($group) {
+                        /* @var $group Collection */
+                        return $group->first()['group'];
+                    },
+                    SORT_NATURAL
+                );
 
         $this->writeMarkdown($parsedRoutes);
     }
 
     /**
-     * @param  Collection $parsedRoutes
+     * @param Collection $parsedRoutes
      *
      * @return void
      */
     private function writeMarkdown($parsedRoutes)
     {
         $outputPath = config('apidoc.output');
-        $targetFile = $outputPath.DIRECTORY_SEPARATOR.'source'.DIRECTORY_SEPARATOR.'index.md';
-        $compareFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'.compare.md';
-        $prependFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'prepend.md';
-        $appendFile = $outputPath.DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR.'append.md';
+        $targetFile = $outputPath . DIRECTORY_SEPARATOR . 'source' . DIRECTORY_SEPARATOR . 'index.md';
+        $compareFile = $outputPath . DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR . '.compare.md';
+        $prependFile = $outputPath . DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR . 'prepend.md';
+        $appendFile = $outputPath . DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR . 'append.md';
 
-        $infoText = view('apidoc::partials.info')
-            ->with('outputPath', ltrim($outputPath, 'public/'))
-            ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection());
+        $infoText =
+            view('apidoc::partials.info')
+                ->with('outputPath', ltrim($outputPath, 'public/'))
+                ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection());
 
         $settings = ['languages' => config('apidoc.example_languages')];
 
-        $parsedRouteOutput = $parsedRoutes->map(function ($routeGroup) use ($settings) {
-            return $routeGroup->map(function ($route) use ($settings) {
-                if (count($route['cleanBodyParameters']) && ! isset($route['headers']['Content-Type'])) {
-                    $route['headers']['Content-Type'] = 'application/json';
-                }
+        $parsedRouteOutput = $parsedRoutes->map(
+            function ($routeGroup) use ($settings) {
+                return $routeGroup->map(
+                    function ($route) use ($settings) {
+                        if (count($route['cleanBodyParameters']) && !isset($route['headers']['Content-Type'])) {
+                            $route['headers']['Content-Type'] = 'application/json';
+                        }
 
-                $route['output'] = (string) view('apidoc::partials.route')
-                    ->with('route', $route)
-                    ->with('settings', $settings)
-                    ->render();
+                        $route['output'] =
+                            (string)view('apidoc::partials.route')
+                                ->with('route', $route)
+                                ->with('settings', $settings)
+                                ->render();
 
-                return $route;
-            });
-        });
+                        return $route;
+                    }
+                );
+            }
+        );
 
-        $frontmatter = view('apidoc::partials.frontmatter')
-            ->with('settings', $settings);
+        $frontmatter = view('apidoc::partials.frontmatter')->with('settings', $settings);
         /*
          * In case the target file already exists, we should check if the documentation was modified
          * and skip the modified parts of the routes.
@@ -162,91 +177,120 @@ class GenerateDocumentation extends Command
                 $frontmatter = trim($generatedFrontmatter[1], "\n");
             }
 
-            $parsedRouteOutput->transform(function ($routeGroup) use ($generatedDocumentation, $compareDocumentation) {
-                return $routeGroup->transform(function ($route) use ($generatedDocumentation, $compareDocumentation) {
-                    if (preg_match('/<!-- START_'.$route['id'].' -->(.*)<!-- END_'.$route['id'].' -->/is', $generatedDocumentation, $existingRouteDoc)) {
-                        $routeDocumentationChanged = (preg_match('/<!-- START_'.$route['id'].' -->(.*)<!-- END_'.$route['id'].' -->/is', $compareDocumentation, $lastDocWeGeneratedForThisRoute) && $lastDocWeGeneratedForThisRoute[1] !== $existingRouteDoc[1]);
-                        if ($routeDocumentationChanged === false || $this->option('force')) {
-                            if ($routeDocumentationChanged) {
-                                $this->warn('Discarded manual changes for route ['.implode(',', $route['methods']).'] '.$route['uri']);
+            $parsedRouteOutput->transform(
+                function ($routeGroup) use ($generatedDocumentation, $compareDocumentation) {
+                    return $routeGroup->transform(
+                        function ($route) use ($generatedDocumentation, $compareDocumentation) {
+                            if (preg_match(
+                                '/<!-- START_' . $route['id'] . ' -->(.*)<!-- END_' . $route['id'] . ' -->/is',
+                                $generatedDocumentation,
+                                $existingRouteDoc
+                            )) {
+                                $routeDocumentationChanged =
+                                    (preg_match(
+                                            '/<!-- START_' .
+                                            $route['id'] .
+                                            ' -->(.*)<!-- END_' .
+                                            $route['id'] .
+                                            ' -->/is',
+                                            $compareDocumentation,
+                                            $lastDocWeGeneratedForThisRoute
+                                        ) && $lastDocWeGeneratedForThisRoute[1] !== $existingRouteDoc[1]);
+                                if ($routeDocumentationChanged === false || $this->option('force')) {
+                                    if ($routeDocumentationChanged) {
+                                        $this->warn(
+                                            'Discarded manual changes for route [' .
+                                            implode(',', $route['methods']) .
+                                            '] ' .
+                                            $route['uri']
+                                        );
+                                    }
+                                } else {
+                                    $this->warn(
+                                        'Skipping modified route [' .
+                                        implode(',', $route['methods']) .
+                                        '] ' .
+                                        $route['uri']
+                                    );
+                                    $route['modified_output'] = $existingRouteDoc[0];
+                                }
                             }
-                        } else {
-                            $this->warn('Skipping modified route ['.implode(',', $route['methods']).'] '.$route['uri']);
-                            $route['modified_output'] = $existingRouteDoc[0];
-                        }
-                    }
 
-                    return $route;
-                });
-            });
+                            return $route;
+                        }
+                    );
+                }
+            );
         }
 
-        $prependFileContents = file_exists($prependFile)
-            ? file_get_contents($prependFile)."\n" : '';
-        $appendFileContents = file_exists($appendFile)
-            ? "\n".file_get_contents($appendFile) : '';
+        $prependFileContents = file_exists($prependFile) ? file_get_contents($prependFile) . "\n" : '';
+        $appendFileContents = file_exists($appendFile) ? "\n" . file_get_contents($appendFile) : '';
 
         $documentarian = new Documentarian();
         $groups = $parsedRouteOutput->keys();
 
-        if (! is_dir($outputPath)) {
+        if (!is_dir($outputPath)) {
             $documentarian->create($outputPath);
         }
 
-        foreach($groups as $group){
+        foreach ($groups as $group) {
             $groupRoutes = $parsedRouteOutput->get($group);
-            $targetFile = $outputPath.DIRECTORY_SEPARATOR.$group.'.md';
-            $frontmatter = view('apidoc::partials.frontmatter')
-                ->with('settings', $settings);
+            $targetFile = $outputPath . DIRECTORY_SEPARATOR . $group . '.md';
+            $frontmatter = view('apidoc::partials.frontmatter')->with('settings', $settings);
 
-            $markdown = view('apidoc::singledoc')
-            ->with('writeCompareFile', false)
-            ->with('frontmatter', $frontmatter)
-            ->with('infoText', $infoText)
-            ->with('prependMd', $prependFileContents)
-            ->with('appendMd', $appendFileContents)
-            ->with('outputPath', config('apidoc.output'))
-            ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection())
-            ->with('groupName', $group)
-            ->with('parsedRoutes', $groupRoutes);
+            $markdown =
+                view('apidoc::singledoc')
+                    ->with('writeCompareFile', false)
+                    ->with('frontmatter', $frontmatter)
+                    ->with('infoText', $infoText)
+                    ->with('prependMd', $prependFileContents)
+                    ->with('appendMd', $appendFileContents)
+                    ->with('outputPath', config('apidoc.output'))
+                    ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection())
+                    ->with('groupName', $group)
+                    ->with('parsedRoutes', $groupRoutes);
 
             // Write output file
             file_put_contents($targetFile, $markdown);
 
-            $this->info('Wrote '. $group .' to: '.$outputPath);
+            $this->info('Wrote ' . $group . ' to: ' . $outputPath);
         }
 
         // Write comparable markdown file
-        $compareMarkdown = view('apidoc::documentarian')
-            ->with('writeCompareFile', true)
-            ->with('frontmatter', $frontmatter)
-            ->with('infoText', $infoText)
-            ->with('prependMd', $prependFileContents)
-            ->with('appendMd', $appendFileContents)
-            ->with('outputPath', config('apidoc.output'))
-            ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection())
-            ->with('parsedRoutes', $parsedRouteOutput);
+        $compareMarkdown =
+            view('apidoc::documentarian')
+                ->with('writeCompareFile', true)
+                ->with('frontmatter', $frontmatter)
+                ->with('infoText', $infoText)
+                ->with('prependMd', $prependFileContents)
+                ->with('appendMd', $appendFileContents)
+                ->with('outputPath', config('apidoc.output'))
+                ->with('showPostmanCollectionButton', $this->shouldGeneratePostmanCollection())
+                ->with('parsedRoutes', $parsedRouteOutput);
 
         file_put_contents($compareFile, $compareMarkdown);
 
-        $this->info('Wrote index.md to: '.$outputPath);
+        $this->info('Wrote index.md to: ' . $outputPath);
 
         $this->info('Generating API HTML code');
 
         $documentarian->generate($outputPath);
 
-        $this->info('Wrote HTML documentation to: '.$outputPath.'/index.html');
+        $this->info('Wrote HTML documentation to: ' . $outputPath . '/index.html');
 
         if ($this->shouldGeneratePostmanCollection()) {
             $this->info('Generating Postman collection');
 
-            file_put_contents($outputPath.DIRECTORY_SEPARATOR.'collection.json', $this->generatePostmanCollection($parsedRoutes));
+            file_put_contents(
+                $outputPath . DIRECTORY_SEPARATOR . 'collection.json',
+                $this->generatePostmanCollection($parsedRoutes)
+            );
         }
 
         if ($logo = config('apidoc.logo')) {
             copy(
                 $logo,
-                $outputPath.DIRECTORY_SEPARATOR.'images'.DIRECTORY_SEPARATOR.'logo.png'
+                $outputPath . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . 'logo.png'
             );
         }
     }
@@ -265,9 +309,19 @@ class GenerateDocumentation extends Command
             /** @var Route $route */
             if ($this->isValidRoute($route) && $this->isRouteVisibleForDocumentation($route->getAction())) {
                 $parsedRoutes[] = $generator->processRoute($route, $routeItem['apply']);
-                $this->info('Processed route: ['.implode(',', $generator->getMethods($route)).'] '.$generator->getUri($route));
+                $this->info(
+                    'Processed route: [' .
+                    implode(',', $generator->getMethods($route)) .
+                    '] ' .
+                    $generator->getUri($route)
+                );
             } else {
-                $this->warn('Skipping route: ['.implode(',', $generator->getMethods($route)).'] '.$generator->getUri($route));
+                $this->warn(
+                    'Skipping route: [' .
+                    implode(',', $generator->getMethods($route)) .
+                    '] ' .
+                    $generator->getUri($route)
+                );
             }
         }
 
@@ -286,34 +340,38 @@ class GenerateDocumentation extends Command
             $action = implode('@', $action);
         }
 
-        return ! is_callable($action) && ! is_null($action);
+        return !is_callable($action) && !is_null($action);
     }
 
     /**
      * @param $action
      *
+     * @return bool
      * @throws ReflectionException
      *
-     * @return bool
      */
     private function isRouteVisibleForDocumentation($action)
     {
         list($class, $method) = Utils::getRouteActionUses($action);
         $reflection = new ReflectionClass($class);
 
-        if (! $reflection->hasMethod($method)) {
+        if (!$reflection->hasMethod($method)) {
             return false;
         }
 
-        $comment = $reflection->getMethod($method)->getDocComment();
+        $comment =
+            $reflection->getMethod($method)
+                ->getDocComment();
 
         if ($comment) {
             $phpdoc = new DocBlock($comment);
 
             return collect($phpdoc->getTags())
-                ->filter(function ($tag) use ($action) {
-                    return $tag->getName() === 'hideFromAPIDocumentation';
-                })
+                ->filter(
+                    function ($tag) use ($action) {
+                        return $tag->getName() === 'hideFromAPIDocumentation';
+                    }
+                )
                 ->isEmpty();
         }
 
@@ -349,7 +407,7 @@ class GenerateDocumentation extends Command
      */
     private function setUserToBeImpersonated($actAs)
     {
-        if (! empty($actAs)) {
+        if (!empty($actAs)) {
             Auth::shouldReceive('check')
                 ->andReturn(true);
             Auth::shouldReceive('id')
