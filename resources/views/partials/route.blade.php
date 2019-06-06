@@ -38,7 +38,9 @@
 @if(count($route['validationRules']))
 ### Validation Rules
 ```php
-{!! json_encode($route['validationRules'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) !!}
+@foreach ($route['validationRules'] as $routeLine)
+{!! $routeLine !!}
+@endforeach
 ```
 @endif
 
